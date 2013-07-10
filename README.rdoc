@@ -1,0 +1,25 @@
+= BackgridjsRails
+
+Vendors backgrid js and extensions into rails asset pipeline
+
+== Installation
+
+Add the gem to your Gemfile
+
+  gem 'backgridjs-rails'
+
+Then add backgrid to the app/assets/javascripts/application.js
+
+  //= require backgrid
+
+And to app/assets/stylesheets/application.css.scss
+
+  *= require backgrid
+
+== Extensions
+
+The backgrid extensions are included too, to use them add the revelant one to application.js and application.css.scss
+
+  //= require backgrid-extensions/backgrid-filter   
+
+This project rocks and uses MIT-LICENSE.
