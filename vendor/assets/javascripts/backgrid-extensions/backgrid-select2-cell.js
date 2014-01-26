@@ -5,8 +5,21 @@
   Copyright (c) 2013 Jimmy Yuen Ho Wong and contributors
   Licensed under the MIT @license.
 */
+(function (root, factory) {
 
-(function (window, $, _, Backbone, Backgrid)  {
+  // CommonJS
+  if (typeof exports == "object") {
+    require("select2");
+    module.exports = factory(root,
+                             require("underscore"),
+                             require("backgrid"));
+  }
+  // Browser
+  else factory(root, root._, root.Backgrid);
+
+}(this, function (root, _, Backgrid)  {
+
+  "use strict";
 
   /**
      Select2CellEditor is a cell editor that renders a `select2` select box
@@ -23,12 +36,13 @@
 
     /** @property */
     events: {
-      "close": "save",
       "change": "save"
     },
 
     /** @property */
-    select2Options: null,
+    select2Options: {
+      openOnEnter: false
+    },
 
     initialize: function () {
       Backgrid.SelectCellEditor.prototype.initialize.apply(this, arguments);
@@ -40,8 +54,7 @@
        edit mode.
      */
     setSelect2Options: function (options) {
-      this.select2Options = _.extend({containerCssClass: "select2-container"},
-                                     options || {});
+      this.select2Options = _.extend(options || {});
     },
 
     /**
@@ -53,7 +66,6 @@
     render: function () {
       Backgrid.SelectCellEditor.prototype.render.apply(this, arguments);
       this.$el.select2(this.select2Options);
-      this.delegateEvents();
       return this;
     },
 
@@ -62,13 +74,29 @@
     */
     postRender: function () {
       var self = this;
-      this.$el.parent()
-        .find("." + this.select2Options.containerCssClass)
-        .on("blur", function (e) {
-          if (!e.relatedTarget) self.close(e);
-        })
-        .on("keydown", this.close)
-        .attr("tabindex", -1).focus();
+      if (self.multiple) self.$el.select2("container").keydown(self.close);
+      else self.$el.data("select2").focusser.keydown(self.close);
+
+      self.$el.on("select2-blur", function (e) {
+        if (!self.multiple) {
+          e.type = "blur";
+          self.close(e);
+        }
+        else {
+          // HACK to get around https://github.com/ivaynberg/select2/issues/2011
+          // select2-blur is triggered from blur and is fired repeatibly under
+          // multiple select. Since blue is fired before everything, but focus
+          // is set in focus and click, we need to wait for a while so other
+          // event handlers may have a chance to run.
+          var id = root.setTimeout(function () {
+            root.clearTimeout(id);
+            if (!self.$el.select2("isFocused")) {
+              e.type = "blur";
+              self.close(e);
+            }
+          }, 200);
+        }
+      }).select2("focus");
     },
 
     remove: function () {
@@ -118,4 +146,4 @@
 
   });
 
-}(window, jQuery, _, Backbone, Backgrid));
+}));

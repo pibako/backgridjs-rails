@@ -5,7 +5,18 @@
   Copyright (c) 2013 Jimmy Yuen Ho Wong and contributors
   Licensed under the MIT @license.
 */
-(function (window, $, _, Backbone, Backgrid)  {
+(function (root, factory) {
+
+  // CommonJS
+  if (typeof exports == "object") {
+    module.exports = factory(require("backbone"), require("backgrid"));
+  }
+  // Browser
+  else factory(root.Backbone, root.Backgrid);
+
+}(this, function (Backbone, Backgrid) {
+
+  "use strict";
 
   /**
      Renders a checkbox for row selection.
@@ -23,9 +34,9 @@
 
     /** @property */
     events: {
-      "keydown :checkbox": "onKeydown",
-      "change :checkbox": "onChange",
-      "click :checkbox": "enterEditMode"
+      "keydown input[type=checkbox]": "onKeydown",
+      "change input[type=checkbox]": "onChange",
+      "click input[type=checkbox]": "enterEditMode"
     },
 
     /**
@@ -37,31 +48,36 @@
        @param {Backbone.Model} options.model
     */
     initialize: function (options) {
-      Backgrid.requireOptions(options, ["model", "column"]);
 
       this.column = options.column;
       if (!(this.column instanceof Backgrid.Column)) {
         this.column = new Backgrid.Column(this.column);
       }
 
-      this.listenTo(this.model, "backgrid:select", function (model, selected) {
-        this.$el.find(":checkbox").prop("checked", selected).change();
+      var column = this.column, model = this.model, $el = this.$el;
+      this.listenTo(column, "change:renderable", function (column, renderable) {
+        $el.toggleClass("renderable", renderable);
       });
 
+      if (Backgrid.callByNeed(column.renderable(), column, model)) $el.addClass("renderable");
+
+      this.listenTo(model, "backgrid:select", function (model, selected) {
+        this.$el.find("input[type=checkbox]").prop("checked", selected).change();
+      });
     },
 
     /**
        Focuses the checkbox.
     */
     enterEditMode: function () {
-      this.$el.find(":checkbox").focus();
+      this.$el.find("input[type=checkbox]").focus();
     },
 
     /**
        Unfocuses the checkbox.
     */
     exitEditMode: function () {
-      this.$el.find(":checkbox").blur();
+      this.$el.find("input[type=checkbox]").blur();
     },
 
     /**
@@ -72,7 +88,7 @@
       if (command.passThru()) return true; // skip ahead to `change`
       if (command.cancel()) {
         e.stopPropagation();
-        this.$el.find(":checkbox").blur();
+        this.$el.find("input[type=checkbox]").blur();
       }
       else if (command.save() || command.moveLeft() || command.moveRight() ||
                command.moveUp() || command.moveDown()) {
@@ -87,8 +103,10 @@
        `backgrid:selected` event with a reference of the model and the
        checkbox's `checked` value.
     */
-    onChange: function (e) {
-      this.model.trigger("backgrid:selected", this.model, $(e.target).prop("checked"));
+    onChange: function () {
+      var checked = this.$el.find("input[type=checkbox]").prop("checked");
+      this.$el.parent().toggleClass("selected", checked);
+      this.model.trigger("backgrid:selected", this.model, checked);
     },
 
     /**
@@ -135,7 +153,6 @@
        @param {Backbone.Collection} options.collection
     */
     initialize: function (options) {
-      Backgrid.requireOptions(options, ["column", "collection"]);
 
       this.column = options.column;
       if (!(this.column instanceof Backgrid.Column)) {
@@ -144,49 +161,75 @@
 
       var collection = this.collection;
       var selectedModels = this.selectedModels = {};
-      this.listenTo(collection, "backgrid:selected", function (model, selected) {
-        if (selected) selectedModels[model.id || model.cid] = model;
+      this.listenTo(collection.fullCollection || collection,
+                    "backgrid:selected", function (model, selected) {
+        if (selected) selectedModels[model.id || model.cid] = 1;
         else {
           delete selectedModels[model.id || model.cid];
-          this.$el.find(":checkbox").prop("checked", false);
+          this.$el.find("input[type=checkbox]").prop("checked", false);
         }
       });
 
-      this.listenTo(collection, "remove", function (model) {
-        delete selectedModels[model.cid];
+      this.listenTo(collection.fullCollection || collection, "remove", function (model) {
+        delete selectedModels[model.id || model.cid];
       });
 
       this.listenTo(collection, "backgrid:refresh", function () {
-        this.$el.find(":checkbox").prop("checked", false);
+        var checked = this.$el.find("input[type=checkbox]").prop("checked");
         for (var i = 0; i < collection.length; i++) {
           var model = collection.at(i);
-          if (selectedModels[model.id || model.cid]) {
-            model.trigger('backgrid:select', model, true);
+          if (checked || selectedModels[model.id || model.cid]) {
+            model.trigger("backgrid:select", model, true);
           }
         }
       });
+
+      var column = this.column, $el = this.$el;
+      this.listenTo(column, "change:renderable", function (column, renderable) {
+        $el.toggleClass("renderable", renderable);
+      });
+
+      if (Backgrid.callByNeed(column.renderable(), column, collection)) $el.addClass("renderable");
     },
 
     /**
-       Progagates the checked value of this checkbox to all the models of the
+       Propagates the checked value of this checkbox to all the models of the
        underlying collection by triggering a Backbone `backgrid:select` event on
-       the models themselves, passing each model and the current `checked` value
-       of the checkbox in each event.
+       the models on the current page, passing each model and the current
+       `checked` value of the checkbox in each event.
+
+       A `backgrid:selected` event will also be triggered with the current
+       `checked` value on all the models regardless of whether they are on the
+       current page.
+
+       This method triggers a 'backgrid:select-all' event on the collection
+       afterwards.
     */
-    onChange: function (e) {
-      var checked = $(e.target).prop("checked");
+    onChange: function () {
+      var checked = this.$el.find("input[type=checkbox]").prop("checked");
 
       var collection = this.collection;
       collection.each(function (model) {
         model.trigger("backgrid:select", model, checked);
       });
+
+      if (collection.fullCollection) {
+        collection.fullCollection.each(function (model) {
+          if (!collection.get(model.cid)) {
+            model.trigger("backgrid:selected", model, checked);
+          }
+        });
+      }
+
+      this.collection.trigger("backgrid:select-all", this.collection, checked);
     }
 
   });
 
   /**
      Convenient method to retrieve a list of selected models. This method only
-     exists when the `SelectAll` extension has been included.
+     exists when the `SelectAll` extension has been included. Selected models
+     are retained across pagination.
 
      @member Backgrid.Grid
      @return {Array.<Backbone.Model>}
@@ -204,12 +247,28 @@
 
     var result = [];
     if (selectAllHeaderCell) {
-      for (var modelId in selectAllHeaderCell.selectedModels) {
-        result.push(this.collection.get(modelId));
+      var selectedModels = selectAllHeaderCell.selectedModels;
+      var collection = this.collection.fullCollection || this.collection;
+      for (var modelId in selectedModels) {
+        result.push(collection.get(modelId));
       }
     }
 
     return result;
   };
 
-}(window, jQuery, _, Backbone, Backgrid));
+  /**
+     Convenient method to deselect the selected models. This method is only
+     available when the `SelectAll` extension has been included.
+
+     @member Backgrid.Grid
+   */
+  Backgrid.Grid.prototype.clearSelectedModels = function () {
+    var selectedModels = this.getSelectedModels();
+    for (var i = 0, l = selectedModels.length; i < l; i++) {
+      var model = selectedModels[i];
+      model.trigger("backgrid:select", model, false);
+    }
+  };
+
+}));

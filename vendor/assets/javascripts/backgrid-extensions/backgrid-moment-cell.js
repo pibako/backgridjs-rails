@@ -5,7 +5,17 @@
   Copyright (c) 2013 Jimmy Yuen Ho Wong and contributors
   Licensed under the MIT @license.
 */
-(function ($, _, Backbone, Backgrid, moment) {
+(function (root, factory) {
+
+  // CommonJS
+  if (typeof exports == "object") {
+    module.exports = factory(require("underscore"), require("backgrid"),
+                             require("moment"));
+  }
+  // Browser
+  else factory(root._, root.Backgrid, root.moment);
+
+}(this, function (_, Backgrid, moment) {
 
   /**
      MomentFormatter converts bi-directionally any datetime values in any format
@@ -152,14 +162,14 @@
      */
     initialize: function (options) {
 
-      Backgrid.Cell.prototype.initialize.apply(this, arguments);
+      MomentCell.__super__.initialize.apply(this, arguments);
 
       var formatterDefaults = MomentFormatter.prototype.defaults;
       var formatterDefaultKeys = _.keys(formatterDefaults);
-      var classAttrs = _.pick(this, formatterDefaultKeys);
+      var instanceAttrs = _.pick(this, formatterDefaultKeys);
       var formatterOptions = _.pick(options, formatterDefaultKeys);
 
-      this.formatter = new this.formatter(_.extend({}, formatterDefaults, classAttrs, formatterOptions));
+      _.extend(this.formatter, formatterDefaults, instanceAttrs, formatterOptions);
 
       this.editor = this.editor.extend({
         attributes: _.extend({}, this.editor.prototype.attributes || this.editor.attributes || {}, {
@@ -172,4 +182,4 @@
 
   _.extend(MomentCell.prototype, MomentFormatter.prototype.defaults);
 
-}(jQuery, _, Backbone, Backgrid, moment));
+}));
